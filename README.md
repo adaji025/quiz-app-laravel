@@ -1,59 +1,457 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Quiz API Documentation
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Laravel-based REST API for managing quiz questions, collecting answers, and generating statistics.
 
-## About Laravel
+## Table of Contents
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- [Overview](#overview)
+- [Base URL](#base-url)
+- [Setup](#setup)
+- [API Endpoints](#api-endpoints)
+  - [Get Questions](#1-get-questions)
+  - [Submit Answers](#2-submit-answers)
+  - [Get All Answers](#3-get-all-answers)
+  - [Get Single Answer by ID](#4-get-single-answer-by-id)
+  - [Get Statistics](#5-get-statistics)
+- [Error Handling](#error-handling)
+- [Data Models](#data-models)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Overview
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+This API provides endpoints for:
+- Retrieving quiz questions grouped by categories
+- Submitting quiz answers
+- Viewing all submitted answers
+- Retrieving a single answer by ID
+- Generating aggregate statistics and individual submission summaries
 
-## Learning Laravel
+## Base URL
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+```
+http://quiz-app.test/api
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+All endpoints are prefixed with `/api`.
 
-## Laravel Sponsors
+## Setup
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+1. **Install Dependencies**
+   ```bash
+   composer install
+   npm install
+   ```
 
-### Premium Partners
+2. **Run Migrations**
+   ```bash
+   php artisan migrate
+   ```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+3. **Seed Database**
+   ```bash
+   php artisan db:seed --class=QuestionSeeder
+   ```
 
-## Contributing
+4. **Start Server**
+   ```bash
+   php artisan serve
+   ```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## API Endpoints
 
-## Code of Conduct
+### 1. Get Questions
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Retrieve all quiz questions grouped by category.
 
-## Security Vulnerabilities
+**Endpoint:** `GET /api/questions`
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+**Description:** Returns all question groups with their associated questions and available options.
 
-## License
+**Request:**
+```http
+GET /api/questions
+Content-Type: application/json
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Response:** `200 OK`
+```json
+[
+  {
+    "title": "Tech Skill Acquired",
+    "questions": [
+      {
+        "id": 1,
+        "title": "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)",
+        "options": ["yes", "no"]
+      },
+      {
+        "id": 2,
+        "title": "Which career path?",
+        "options": [
+          "Data Analytics",
+          "Data Science",
+          "Data Engineering",
+          "SOC Analyst",
+          "GRC",
+          "Ethical Hacking",
+          "Business Analysis",
+          "Project Management"
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Portfolio",
+    "questions": [
+      {
+        "id": 3,
+        "title": "Do you have a professional portfolio showcasing your work?",
+        "options": ["yes", "no"]
+      },
+      {
+        "id": 4,
+        "title": "How many projects are currently in your portfolio?",
+        "options": ["0 Project", "1-5 Projects", "5-10 Projects", "10+ Projects"]
+      }
+    ]
+  }
+]
+```
+
+---
+
+### 2. Submit Answers
+
+Submit answers to quiz questions.
+
+**Endpoint:** `POST /api/answers`
+
+**Description:** Accepts answers in a nested structure grouped by question category. Validates that answers match available options for each question.
+
+**Request:**
+```http
+POST /api/answers
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "Tech Skill Acquired": {
+    "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)": "yes",
+    "Which career path?": "Data Engineering"
+  },
+  "Portfolio": {
+    "Do you have a professional portfolio showcasing your work?": "yes",
+    "How many projects are currently in your portfolio?": "0 Project"
+  },
+  "CV (ATS Compliance)": {
+    "Is your CV keyword-optimized for Applicant Tracking Systems (ATS)?": "yes",
+    "On a scale of 1–5, how confident are you that your CV matches job descriptions in your field?": "4"
+  },
+  "LinkedIn Optimization": {
+    "Do you have an optimized LinkedIn profile that highlights your skills and achievements in your preferred career path selected in question 1?": "yes",
+    "Do recruiters reach out to you on LinkedIn?": "yes"
+  },
+  "References": {
+    "Do you have at least one professional/organizational reference in your preferred career path?": "yes"
+  },
+  "Interview Readiness – SEAT": {
+    "Do you know how to use the SEAT (Skills, Experience, Achievements, Traits) approach to answer 'Tell me about yourself'?": "yes",
+    "On a scale of 1–5, how confident are you in applying SEAT during interviews?": "4"
+  },
+  "Interview Readiness – STAR": {
+    "Do you know how to use the STAR (Situation, Task, Action, Result) method to answer competency-based questions?": "yes",
+    "On a scale of 1–5, how confident are you in applying STAR during interviews?": "4"
+  }
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "message": "Answers saved successfully",
+  "answers": [
+    {
+      "id": 1,
+      "question_id": 1,
+      "question_title": "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)",
+      "answer": "yes",
+      "created_at": "2025-12-27T01:45:00.000000Z"
+    },
+    {
+      "id": 2,
+      "question_id": 2,
+      "question_title": "Which career path?",
+      "answer": "Data Engineering",
+      "created_at": "2025-12-27T01:45:00.000000Z"
+    }
+  ]
+}
+```
+
+**Error Response:** `422 Unprocessable Entity`
+```json
+{
+  "error": "Invalid answer 'maybe' for question 'Have You Taken a Course...'. Valid options are: yes, no"
+}
+```
+
+**Validation Rules:**
+- Each top-level key must be a valid question group title
+- Each nested key must be a valid question title
+- Each answer value must match one of the question's available options
+- Question group titles and question titles must match exactly (case-sensitive)
+
+---
+
+### 3. Get All Answers
+
+Retrieve all submitted answers grouped by submission timestamp.
+
+**Endpoint:** `GET /api/answers`
+
+**Description:** Returns all answers grouped by submission time and question category.
+
+**Request:**
+```http
+GET /api/answers
+Content-Type: application/json
+```
+
+**Response:** `200 OK`
+```json
+{
+  "answers": {
+    "2025-12-27 01:45:00": {
+      "Tech Skill Acquired": {
+        "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)": "yes",
+        "Which career path?": "Data Engineering"
+      },
+      "Portfolio": {
+        "Do you have a professional portfolio showcasing your work?": "yes",
+        "How many projects are currently in your portfolio?": "0 Project"
+      }
+    },
+    "2025-12-27 02:30:00": {
+      "Tech Skill Acquired": {
+        "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)": "no",
+        "Which career path?": "Data Science"
+      }
+    }
+  }
+}
+```
+
+**Note:** Answers are grouped by submission timestamp (YYYY-MM-DD HH:MM:SS format) and then by question category.
+
+---
+
+### 4. Get Single Answer by ID
+
+Retrieve a specific answer by its ID.
+
+**Endpoint:** `GET /api/answers/{id}`
+
+**Description:** Returns detailed information about a single answer including the question and question group details.
+
+**Request:**
+```http
+GET /api/answers/1
+Content-Type: application/json
+```
+
+**URL Parameters:**
+- `id` (integer, required) - The ID of the answer to retrieve
+
+**Response:** `200 OK`
+```json
+{
+  "id": 1,
+  "question_id": 1,
+  "question_title": "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)",
+  "question_group": "Tech Skill Acquired",
+  "answer": "yes",
+  "created_at": "2025-12-27T01:45:00.000000Z",
+  "updated_at": "2025-12-27T01:45:00.000000Z"
+}
+```
+
+**Error Response:** `404 Not Found`
+```json
+{
+  "error": "Answer not found"
+}
+```
+
+---
+
+### 5. Get Statistics
+
+Retrieve aggregate statistics and individual submission summaries.
+
+**Endpoint:** `GET /api/statistics`
+
+**Description:** Returns comprehensive statistics including:
+- Aggregate statistics: Count and percentage of each answer option per question
+- Individual summaries: All submissions with timestamps and answers
+- Total number of submissions
+
+**Request:**
+```http
+GET /api/statistics
+Content-Type: application/json
+```
+
+**Response:** `200 OK`
+```json
+{
+  "aggregate_statistics": [
+    {
+      "question_id": 1,
+      "question_title": "Have You Taken a Course in any of these Career Paths...",
+      "question_group": "Tech Skill Acquired",
+      "total_answers": 10,
+      "options": [
+        {
+          "option": "yes",
+          "count": 7,
+          "percentage": 70.0
+        },
+        {
+          "option": "no",
+          "count": 3,
+          "percentage": 30.0
+        }
+      ]
+    },
+    {
+      "question_id": 2,
+      "question_title": "Which career path?",
+      "question_group": "Tech Skill Acquired",
+      "total_answers": 10,
+      "options": [
+        {
+          "option": "Data Analytics",
+          "count": 2,
+          "percentage": 20.0
+        },
+        {
+          "option": "Data Science",
+          "count": 3,
+          "percentage": 30.0
+        },
+        {
+          "option": "Data Engineering",
+          "count": 5,
+          "percentage": 50.0
+        }
+      ]
+    }
+  ],
+  "individual_summaries": [
+    {
+      "submitted_at": "2025-12-27 01:45:00",
+      "answers": {
+        "Tech Skill Acquired": {
+          "Have You Taken a Course in any of these Career Paths...": "yes",
+          "Which career path?": "Data Engineering"
+        },
+        "Portfolio": {
+          "Do you have a professional portfolio showcasing your work?": "yes",
+          "How many projects are currently in your portfolio?": "0 Project"
+        }
+      }
+    }
+  ],
+  "total_submissions": 1
+}
+```
+
+**Response Fields:**
+- `aggregate_statistics`: Array of statistics for each question
+  - `question_id`: Unique question identifier
+  - `question_title`: Full question text
+  - `question_group`: Category name
+  - `total_answers`: Total number of answers received
+  - `options`: Array of statistics for each option (count and percentage)
+- `individual_summaries`: Array of all submissions
+  - `submitted_at`: Timestamp of submission
+  - `answers`: Answers grouped by category
+- `total_submissions`: Total number of submissions
+
+---
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+- `200 OK` - Request successful
+- `201 Created` - Resource created successfully
+- `404 Not Found` - Resource not found
+- `422 Unprocessable Entity` - Validation error
+- `500 Internal Server Error` - Server error
+
+**Error Response Format:**
+```json
+{
+  "error": "Error message description"
+}
+```
+
+Or for validation errors:
+```json
+{
+  "errors": {
+    "field_name": ["Validation error message"]
+  }
+}
+```
+
+---
+
+## Data Models
+
+### Question Group
+- `id` (integer) - Primary key
+- `title` (string) - Category name
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
+### Question
+- `id` (integer) - Primary key
+- `question_group_id` (integer) - Foreign key to question_groups
+- `title` (text) - Question text
+- `options` (JSON array) - Available answer options
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
+### Answer
+- `id` (integer) - Primary key
+- `question_id` (integer) - Foreign key to questions
+- `answer` (string) - Selected answer option
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
+---
+
+## Question Categories
+
+The API includes the following question categories:
+
+1. **Tech Skill Acquired** - Questions about career path courses
+2. **Portfolio** - Questions about professional portfolio
+3. **CV (ATS Compliance)** - Questions about CV optimization
+4. **LinkedIn Optimization** - Questions about LinkedIn profile
+5. **References** - Questions about professional references
+6. **Interview Readiness – SEAT** - Questions about SEAT interview method
+7. **Interview Readiness – STAR** - Questions about STAR interview method
+
+---
+
+## Notes
+
+- All endpoints return JSON responses
+- Question group titles and question titles must match exactly (case-sensitive) when submitting answers
+- Answers are validated against available options for each question
+- Statistics are calculated in real-time based on all submitted answers
+- Timestamps are in UTC format

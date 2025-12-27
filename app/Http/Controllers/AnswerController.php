@@ -90,4 +90,25 @@ class AnswerController extends Controller
             'answers' => $groupedAnswers,
         ]);
     }
+
+    public function show(int $id): JsonResponse
+    {
+        $answer = Answer::with('question.questionGroup')->find($id);
+
+        if (! $answer) {
+            return response()->json([
+                'error' => 'Answer not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'id' => $answer->id,
+            'question_id' => $answer->question_id,
+            'question_title' => $answer->question->title,
+            'question_group' => $answer->question->questionGroup->title,
+            'answer' => $answer->answer,
+            'created_at' => $answer->created_at,
+            'updated_at' => $answer->updated_at,
+        ]);
+    }
 }
