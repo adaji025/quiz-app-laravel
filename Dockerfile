@@ -1,7 +1,7 @@
 # Multi-stage build for Laravel application
 
 # Stage 1: Build stage
-FROM php:8.2-fpm-alpine AS builder
+FROM php:8.4-fpm-alpine AS builder
 
 # Install system dependencies and PHP extensions
 RUN apk add --no-cache \
@@ -48,7 +48,7 @@ RUN composer dump-autoload --optimize --classmap-authoritative
 RUN npm run build
 
 # Stage 2: Production stage
-FROM php:8.2-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
