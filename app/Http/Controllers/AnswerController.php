@@ -8,85 +8,122 @@ use App\Models\QuestionGroup;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class AnswerController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            '*' => 'required|array',
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                '*' => 'required|array',
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $answersData = $request->all();
-        $savedAnswers = [];
-
-        foreach ($answersData as $groupTitle => $questions) {
-            $questionGroup = QuestionGroup::where('title', $groupTitle)->first();
-
-            if (! $questionGroup) {
-                continue;
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                ], 422);
             }
 
-            foreach ($questions as $questionTitle => $answerValue) {
-                $question = Question::where('question_group_id', $questionGroup->id)
-                    ->where('title', $questionTitle)
-                    ->first();
+            $answersData = $request->all();
+            $savedAnswers = [];
+            
+            // Generate a unique submission ID for this entire submission
+            $submissionId = (string) Str::uuid();
 
-                if (! $question) {
-                    continue;
-                }
+            foreach ($answersData as $groupTitle => $questions) {
+                $questionGroup = QuestionGroup::where('title', $groupTitle)->first();
 
-                // Validate that the answer is in the question's options
-                if (! in_array($answerValue, $question->options)) {
+                if (! $questionGroup) {
                     return response()->json([
-                        'error' => "Invalid answer '{$answerValue}' for question '{$questionTitle}'. Valid options are: ".implode(', ', $question->options),
+                        'error' => "Question group '{$groupTitle}' not found",
                     ], 422);
                 }
 
-                $answer = Answer::create([
-                    'question_id' => $question->id,
-                    'answer' => $answerValue,
-                ]);
+                foreach ($questions as $questionTitle => $answerValue) {
+                    $question = Question::where('question_group_id', $questionGroup->id)
+                        ->where('title', $questionTitle)
+                        ->first();
 
-                $savedAnswers[] = [
-                    'id' => $answer->id,
-                    'question_id' => $question->id,
-                    'question_title' => $questionTitle,
-                    'answer' => $answerValue,
-                    'created_at' => $answer->created_at,
-                ];
+                    if (! $question) {
+                        return response()->json([
+                            'error' => "Question '{$questionTitle}' not found in group '{$groupTitle}'",
+                        ], 422);
+                    }
+
+                    // Validate that the answer is in the question's options
+                    if (! in_array($answerValue, $question->options)) {
+                        return response()->json([
+                            'error' => "Invalid answer '{$answerValue}' for question '{$questionTitle}'. Valid options are: ".implode(', ', $question->options),
+                        ], 422);
+                    }
+
+                    try {
+                        $answer = Answer::create([
+                            'submission_id' => $submissionId,
+                            'question_id' => $question->id,
+                            'answer' => $answerValue,
+                        ]);
+
+                        $savedAnswers[] = [
+                            'id' => $answer->id,
+                            'question_id' => $question->id,
+                            'question_title' => $questionTitle,
+                            'answer' => $answerValue,
+                            'created_at' => $answer->created_at,
+                        ];
+                    } catch (\Exception $e) {
+                        return response()->json([
+                            'error' => 'Failed to save answer',
+                            'message' => $e->getMessage(),
+                        ], 500);
+                    }
+                }
             }
-        }
 
-        return response()->json([
-            'message' => 'Answers saved successfully',
-            'answers' => $savedAnswers,
-        ], 201);
+            if (empty($savedAnswers)) {
+                return response()->json([
+                    'error' => 'No valid answers were submitted',
+                ], 422);
+            }
+
+            return response()->json([
+                'message' => 'Answers saved successfully',
+                'submission_id' => $submissionId,
+                'answers' => $savedAnswers,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred while processing your request',
+                'message' => config('app.debug') ? $e->getMessage() : 'Please check your request and try again',
+            ], 500);
+        }
     }
 
     public function index(): JsonResponse
     {
         $answers = Answer::with('question.questionGroup')
+            ->whereNotNull('submission_id')
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $groupedAnswers = $answers->groupBy(function ($answer) {
-            return $answer->created_at->format('Y-m-d H:i:s');
-        })->map(function ($group) {
-            return $group->groupBy(function ($answer) {
-                return $answer->question->questionGroup->title;
-            })->map(function ($groupAnswers) {
-                return $groupAnswers->mapWithKeys(function ($answer) {
-                    return [$answer->question->title => $answer->answer];
-                });
-            });
-        });
+        $groupedAnswers = $answers->groupBy('submission_id')->map(function ($group) {
+            $firstAnswer = $group->first();
+            return [
+                'submitted_at' => $firstAnswer->created_at->format('Y-m-d H:i:s'),
+                'answers' => $group->groupBy(function ($answer) {
+                    return $answer->question->questionGroup->title;
+                })->map(function ($groupAnswers) {
+                    return $groupAnswers->mapWithKeys(function ($answer) {
+                        return [$answer->question->title => $answer->answer];
+                    });
+                }),
+            ];
+        })->values();
 
         return response()->json([
+            'id' => (string) Str::uuid(),
             'answers' => $groupedAnswers,
         ]);
     }
