@@ -88,10 +88,30 @@ class AnswerController extends Controller
                 ], 422);
             }
 
+            // Get the first answer's timestamp for submitted_at
+            $firstAnswer = Answer::where('submission_id', $submissionId)->first();
+            
+            // Format the response with full answer details including question_group
+            $formattedAnswers = Answer::with('question.questionGroup')
+                ->where('submission_id', $submissionId)
+                ->orderBy('id', 'asc')
+                ->get()
+                ->map(function ($answer) {
+                    return [
+                        'id' => $answer->id,
+                        'question_id' => $answer->question_id,
+                        'question_title' => $answer->question->title,
+                        'question_group' => $answer->question->questionGroup->title,
+                        'answer' => $answer->answer,
+                        'created_at' => $answer->created_at,
+                        'updated_at' => $answer->updated_at,
+                    ];
+                });
+
             return response()->json([
-                'message' => 'Answers saved successfully',
-                'submission_id' => $submissionId,
-                'answers' => $savedAnswers,
+                'id' => $submissionId,
+                'submitted_at' => $firstAnswer->created_at->format('Y-m-d H:i:s'),
+                'answers' => $formattedAnswers,
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
