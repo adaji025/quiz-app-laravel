@@ -11,7 +11,7 @@ A Laravel-based REST API for managing quiz questions, collecting answers, and ge
   - [Get Questions](#1-get-questions)
   - [Submit Answers](#2-submit-answers)
   - [Get All Answers](#3-get-all-answers)
-  - [Get Single Answer by ID](#4-get-single-answer-by-id)
+  - [Get Answer(s) by ID](#4-get-answers-by-id)
   - [Get Statistics](#5-get-statistics)
 - [Error Handling](#error-handling)
 - [Data Models](#data-models)
@@ -20,10 +20,10 @@ A Laravel-based REST API for managing quiz questions, collecting answers, and ge
 
 This API provides endpoints for:
 - Retrieving quiz questions grouped by categories
-- Submitting quiz answers
-- Viewing all submitted answers
-- Retrieving a single answer by ID
-- Generating aggregate statistics and individual submission summaries
+- Submitting quiz answers (each submission gets a unique UUID)
+- Viewing all submitted answers grouped by submission
+- Retrieving answers by ID (supports both individual answer IDs and submission UUIDs)
+- Generating statistics per submission (all submissions or by submission ID)
 
 ## Base URL
 
@@ -170,6 +170,7 @@ Content-Type: application/json
 ```json
 {
   "message": "Answers saved successfully",
+  "submission_id": "93d896a5-dec0-41f1-b068-c6edbed3b186",
   "answers": [
     {
       "id": 1,
@@ -189,6 +190,8 @@ Content-Type: application/json
 }
 ```
 
+**Note:** The response includes a `submission_id` (UUID) that uniquely identifies this entire submission. All answers in the response share the same `submission_id`.
+
 **Error Response:** `422 Unprocessable Entity`
 ```json
 {
@@ -206,11 +209,11 @@ Content-Type: application/json
 
 ### 3. Get All Answers
 
-Retrieve all submitted answers grouped by submission timestamp.
+Retrieve all submitted answers grouped by submission.
 
 **Endpoint:** `GET /api/answers`
 
-**Description:** Returns all answers grouped by submission time and question category.
+**Description:** Returns an array of all submissions, each with its submission ID, timestamp, and answers grouped by question category.
 
 **Request:**
 ```http
@@ -220,39 +223,47 @@ Content-Type: application/json
 
 **Response:** `200 OK`
 ```json
-{
-  "answers": {
-    "2025-12-27 01:45:00": {
+[
+  {
+    "id": "93d896a5-dec0-41f1-b068-c6edbed3b186",
+    "submitted_at": "2025-12-27 04:57:01",
+    "answers": {
       "Tech Skill Acquired": {
         "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)": "yes",
-        "Which career path?": "Data Engineering"
+        "Which career path?": "Data Science"
       },
       "Portfolio": {
         "Do you have a professional portfolio showcasing your work?": "yes",
-        "How many projects are currently in your portfolio?": "0 Project"
+        "How many projects are currently in your portfolio?": "5-10 Projects"
       }
-    },
-    "2025-12-27 02:30:00": {
+    }
+  },
+  {
+    "id": "another-submission-uuid",
+    "submitted_at": "2025-12-27 05:00:00",
+    "answers": {
       "Tech Skill Acquired": {
-        "Have You Taken a Course in any of these Career Paths (Data Analytics, Data Science, Data Engineering, Ethical Hacking, SOC Analyst, GRC, Business Analysis, Project Management)": "no",
-        "Which career path?": "Data Science"
+        "Have You Taken a Course in any of these Career Paths...": "no",
+        "Which career path?": "Data Engineering"
       }
     }
   }
-}
+]
 ```
 
-**Note:** Answers are grouped by submission timestamp (YYYY-MM-DD HH:MM:SS format) and then by question category.
+**Note:** Returns an array of submissions, each with a unique `id` (submission_id UUID), `submitted_at` timestamp, and `answers` grouped by question category.
 
 ---
 
-### 4. Get Single Answer by ID
+### 4. Get Answer(s) by ID
 
-Retrieve a specific answer by its ID.
+Retrieve a specific answer record or an entire submission by ID.
 
 **Endpoint:** `GET /api/answers/{id}`
 
-**Description:** Returns detailed information about a single answer including the question and question group details.
+**Description:** 
+- If `id` is a numeric value: Returns a single answer record
+- If `id` is a UUID: Returns all answers for that submission as an array
 
 **Request:**
 ```http
@@ -261,9 +272,9 @@ Content-Type: application/json
 ```
 
 **URL Parameters:**
-- `id` (integer, required) - The ID of the answer to retrieve
+- `id` (integer or UUID string, required) - The ID of the answer record (integer) or submission (UUID)
 
-**Response:** `200 OK`
+**Response for Numeric ID (Single Answer):** `200 OK`
 ```json
 {
   "id": 1,
@@ -276,10 +287,55 @@ Content-Type: application/json
 }
 ```
 
+**Response for UUID (Submission):** `200 OK`
+```json
+{
+  "id": "93d896a5-dec0-41f1-b068-c6edbed3b186",
+  "submitted_at": "2025-12-27 04:57:01",
+  "answers": [
+    {
+      "id": 1,
+      "question_id": 1,
+      "question_title": "Have You Taken a Course...",
+      "question_group": "Tech Skill Acquired",
+      "answer": "yes",
+      "created_at": "2025-12-27T04:57:01.000000Z",
+      "updated_at": "2025-12-27T04:57:01.000000Z"
+    },
+    {
+      "id": 2,
+      "question_id": 2,
+      "question_title": "Which career path?",
+      "question_group": "Tech Skill Acquired",
+      "answer": "Data Science",
+      "created_at": "2025-12-27T04:57:01.000000Z",
+      "updated_at": "2025-12-27T04:57:01.000000Z"
+    }
+  ]
+}
+```
+
 **Error Response:** `404 Not Found`
 ```json
 {
-  "error": "Answer not found"
+  "error": "Answer not found",
+  "message": "No answer record found with ID: 999",
+  "searched_id": "999",
+  "id_type": "answer_id (integer)",
+  "hint": "Make sure the answer ID exists. Answer IDs are auto-incrementing integers."
+}
+```
+
+**Error Response for Invalid Format:** `422 Unprocessable Entity`
+```json
+{
+  "error": "Invalid ID format",
+  "message": "The provided ID 'invalid-id' is not a valid UUID or numeric ID",
+  "searched_id": "invalid-id",
+  "expected_formats": {
+    "UUID format": "e.g., 93d896a5-dec0-41f1-b068-c6edbed3b186 (for submission_id)",
+    "Numeric ID": "e.g., 1, 2, 3 (for individual answer record ID)"
+  }
 }
 ```
 
@@ -287,14 +343,13 @@ Content-Type: application/json
 
 ### 5. Get Statistics
 
-Retrieve aggregate statistics and individual submission summaries.
+Retrieve statistics for all submissions or a specific submission.
 
-**Endpoint:** `GET /api/statistics`
+**Endpoint:** `GET /api/statistics` or `GET /api/statistics/{id}`
 
-**Description:** Returns comprehensive statistics including:
-- Aggregate statistics: Count and percentage of each answer option per question
-- Individual summaries: All submissions with timestamps and answers
-- Total number of submissions
+**Description:** 
+- `GET /api/statistics`: Returns an array of statistics for all submissions
+- `GET /api/statistics/{id}`: Returns statistics for a specific submission by submission ID (UUID)
 
 **Request:**
 ```http
@@ -302,82 +357,113 @@ GET /api/statistics
 Content-Type: application/json
 ```
 
-**Response:** `200 OK`
+**Response:** `200 OK` (All Submissions)
+```json
+[
+  {
+    "id": "93d896a5-dec0-41f1-b068-c6edbed3b186",
+    "submitted_at": "2025-12-27 04:57:01",
+    "statistics": [
+      {
+        "question_id": 1,
+        "question_title": "Have You Taken a Course in any of these Career Paths...",
+        "question_group": "Tech Skill Acquired",
+        "total_answers": 1,
+        "options": [
+          {
+            "option": "yes",
+            "count": 1,
+            "percentage": 100.0
+          },
+          {
+            "option": "no",
+            "count": 0,
+            "percentage": 0.0
+          }
+        ]
+      },
+      {
+        "question_id": 2,
+        "question_title": "Which career path?",
+        "question_group": "Tech Skill Acquired",
+        "total_answers": 1,
+        "options": [
+          {
+            "option": "Data Science",
+            "count": 1,
+            "percentage": 100.0
+          }
+        ]
+      }
+    ],
+    "answers": {
+      "Tech Skill Acquired": {
+        "Have You Taken a Course in any of these Career Paths...": "yes",
+        "Which career path?": "Data Science"
+      },
+      "Portfolio": {
+        "Do you have a professional portfolio showcasing your work?": "yes",
+        "How many projects are currently in your portfolio?": "5-10 Projects"
+      }
+    }
+  }
+]
+```
+
+**Request for Specific Submission:**
+```http
+GET /api/statistics/93d896a5-dec0-41f1-b068-c6edbed3b186
+Content-Type: application/json
+```
+
+**Response:** `200 OK` (Single Submission)
 ```json
 {
-  "aggregate_statistics": [
+  "id": "93d896a5-dec0-41f1-b068-c6edbed3b186",
+  "submitted_at": "2025-12-27 04:57:01",
+  "statistics": [
     {
       "question_id": 1,
       "question_title": "Have You Taken a Course in any of these Career Paths...",
       "question_group": "Tech Skill Acquired",
-      "total_answers": 10,
+      "total_answers": 1,
       "options": [
         {
           "option": "yes",
-          "count": 7,
-          "percentage": 70.0
-        },
-        {
-          "option": "no",
-          "count": 3,
-          "percentage": 30.0
-        }
-      ]
-    },
-    {
-      "question_id": 2,
-      "question_title": "Which career path?",
-      "question_group": "Tech Skill Acquired",
-      "total_answers": 10,
-      "options": [
-        {
-          "option": "Data Analytics",
-          "count": 2,
-          "percentage": 20.0
-        },
-        {
-          "option": "Data Science",
-          "count": 3,
-          "percentage": 30.0
-        },
-        {
-          "option": "Data Engineering",
-          "count": 5,
-          "percentage": 50.0
+          "count": 1,
+          "percentage": 100.0
         }
       ]
     }
   ],
-  "individual_summaries": [
-    {
-      "submitted_at": "2025-12-27 01:45:00",
-      "answers": {
-        "Tech Skill Acquired": {
-          "Have You Taken a Course in any of these Career Paths...": "yes",
-          "Which career path?": "Data Engineering"
-        },
-        "Portfolio": {
-          "Do you have a professional portfolio showcasing your work?": "yes",
-          "How many projects are currently in your portfolio?": "0 Project"
-        }
-      }
+  "answers": {
+    "Tech Skill Acquired": {
+      "Have You Taken a Course in any of these Career Paths...": "yes",
+      "Which career path?": "Data Science"
     }
-  ],
-  "total_submissions": 1
+  }
 }
 ```
 
 **Response Fields:**
-- `aggregate_statistics`: Array of statistics for each question
+- `id`: Submission ID (UUID)
+- `submitted_at`: Timestamp when the submission was made
+- `statistics`: Array of statistics for each question in this submission
   - `question_id`: Unique question identifier
   - `question_title`: Full question text
   - `question_group`: Category name
-  - `total_answers`: Total number of answers received
+  - `total_answers`: Total number of answers for this question in this submission
   - `options`: Array of statistics for each option (count and percentage)
-- `individual_summaries`: Array of all submissions
-  - `submitted_at`: Timestamp of submission
-  - `answers`: Answers grouped by category
-- `total_submissions`: Total number of submissions
+- `answers`: Answers grouped by question category
+
+**Error Response:** `404 Not Found`
+```json
+{
+  "error": "Submission not found",
+  "message": "No submission found with ID: 93d896a5-dec0-41f1-b068-c6edbed3b186",
+  "searched_id": "93d896a5-dec0-41f1-b068-c6edbed3b186"
+}
+```
 
 ---
 
@@ -427,6 +513,7 @@ Or for validation errors:
 
 ### Answer
 - `id` (integer) - Primary key
+- `submission_id` (string, UUID) - Unique identifier for the submission (all answers in one POST request share the same submission_id)
 - `question_id` (integer) - Foreign key to questions
 - `answer` (string) - Selected answer option
 - `created_at` (timestamp)
