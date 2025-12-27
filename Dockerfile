@@ -12,8 +12,10 @@ RUN apk add --no-cache \
     zip \
     unzip \
     sqlite \
+    sqlite-dev \
     nodejs \
-    npm
+    npm \
+    pkgconfig
 
 # Install PHP extensions
 RUN docker-php-ext-install pdo pdo_sqlite zip
@@ -53,6 +55,7 @@ RUN apk add --no-cache \
     nginx \
     supervisor \
     sqlite \
+    sqlite-dev \
     curl \
     gettext
 
