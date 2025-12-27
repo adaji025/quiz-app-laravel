@@ -24,7 +24,8 @@ php artisan db:seed --class=QuestionSeeder --force || true
 # Clear and cache config
 php artisan config:cache
 php artisan route:cache
-php artisan view:cache
+# Cache views only if views directory exists (for API-only apps, this may not exist)
+php artisan view:cache || true
 
 # Substitute PORT in nginx config template
 envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
