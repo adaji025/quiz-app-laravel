@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Answer;
 use App\Models\Question;
 use App\Models\QuestionGroup;
+use App\Services\StatisticsScoringService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -13,62 +14,42 @@ class StatisticsController extends Controller
 {
     public function index(): JsonResponse
     {
+        $scoringService = new StatisticsScoringService();
+        
         $answers = Answer::with(['question.questionGroup'])
             ->whereNotNull('submission_id')
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Group by submission_id and calculate statistics for each submission
-        $submissionStats = $answers->groupBy('submission_id')->map(function ($group, $submissionId) {
+        // Get all question groups with their questions
+        $questionGroups = QuestionGroup::with('questions')->get();
+
+        // Group by submission_id and calculate category scores for each submission
+        $submissionStats = $answers->groupBy('submission_id')->map(function ($group, $submissionId) use ($scoringService, $questionGroups) {
             $firstAnswer = $group->first();
             
-            // Calculate statistics for this submission
-            $questionStats = [];
-            $questions = Question::with('questionGroup')->get();
+            // Calculate category percentages
+            $categories = [];
             
-            foreach ($questions as $question) {
-                $submissionAnswers = $group->where('question_id', $question->id);
-                $totalAnswers = $submissionAnswers->count();
+            foreach ($questionGroups as $questionGroup) {
+                $categoryAnswers = $group->filter(function ($answer) use ($questionGroup) {
+                    return $answer->question->question_group_id === $questionGroup->id;
+                });
                 
-                if ($totalAnswers > 0) {
-                    $answerCounts = $submissionAnswers->groupBy('answer')->map->count();
+                if ($categoryAnswers->isNotEmpty()) {
+                    $categoryScore = $scoringService->calculateCategoryScore(
+                        $categoryAnswers,
+                        $questionGroup->questions
+                    );
                     
-                    $optionStats = [];
-                    foreach ($question->options as $option) {
-                        $count = $answerCounts->get($option, 0);
-                        $percentage = $totalAnswers > 0 ? round(($count / $totalAnswers) * 100, 2) : 0;
-                        
-                        $optionStats[] = [
-                            'option' => $option,
-                            'count' => $count,
-                            'percentage' => $percentage,
-                        ];
-                    }
-                    
-                    $questionStats[] = [
-                        'question_id' => $question->id,
-                        'question_title' => $question->title,
-                        'question_group' => $question->questionGroup->title,
-                        'total_answers' => $totalAnswers,
-                        'options' => $optionStats,
-                    ];
+                    $categories[$questionGroup->title] = $categoryScore['percentage'];
                 }
             }
-            
-            // Group answers by category for this submission
-            $groupedAnswers = $group->groupBy(function ($answer) {
-                return $answer->question->questionGroup->title;
-            })->map(function ($categoryAnswers) {
-                return $categoryAnswers->mapWithKeys(function ($answer) {
-                    return [$answer->question->title => $answer->answer];
-                });
-            });
             
             return [
                 'id' => $submissionId,
                 'submitted_at' => $firstAnswer->created_at->format('Y-m-d H:i:s'),
-                'statistics' => $questionStats,
-                'answers' => $groupedAnswers,
+                'categories' => $categories,
             ];
         })->values();
 
@@ -86,6 +67,8 @@ class StatisticsController extends Controller
             ], 422);
         }
 
+        $scoringService = new StatisticsScoringService();
+
         $answers = Answer::with(['question.questionGroup'])
             ->where('submission_id', $id)
             ->orderBy('created_at', 'asc')
@@ -101,53 +84,31 @@ class StatisticsController extends Controller
 
         $firstAnswer = $answers->first();
         
-        // Calculate statistics for this specific submission
-        $questionStats = [];
-        $questions = Question::with('questionGroup')->get();
+        // Get all question groups with their questions
+        $questionGroups = QuestionGroup::with('questions')->get();
         
-        foreach ($questions as $question) {
-            $submissionAnswers = $answers->where('question_id', $question->id);
-            $totalAnswers = $submissionAnswers->count();
+        // Calculate category percentages
+        $categories = [];
+        
+        foreach ($questionGroups as $questionGroup) {
+            $categoryAnswers = $answers->filter(function ($answer) use ($questionGroup) {
+                return $answer->question->question_group_id === $questionGroup->id;
+            });
             
-            if ($totalAnswers > 0) {
-                $answerCounts = $submissionAnswers->groupBy('answer')->map->count();
+            if ($categoryAnswers->isNotEmpty()) {
+                $categoryScore = $scoringService->calculateCategoryScore(
+                    $categoryAnswers,
+                    $questionGroup->questions
+                );
                 
-                $optionStats = [];
-                foreach ($question->options as $option) {
-                    $count = $answerCounts->get($option, 0);
-                    $percentage = $totalAnswers > 0 ? round(($count / $totalAnswers) * 100, 2) : 0;
-                    
-                    $optionStats[] = [
-                        'option' => $option,
-                        'count' => $count,
-                        'percentage' => $percentage,
-                    ];
-                }
-                
-                $questionStats[] = [
-                    'question_id' => $question->id,
-                    'question_title' => $question->title,
-                    'question_group' => $question->questionGroup->title,
-                    'total_answers' => $totalAnswers,
-                    'options' => $optionStats,
-                ];
+                $categories[$questionGroup->title] = $categoryScore['percentage'];
             }
         }
-        
-        // Group answers by category
-        $groupedAnswers = $answers->groupBy(function ($answer) {
-            return $answer->question->questionGroup->title;
-        })->map(function ($categoryAnswers) {
-            return $categoryAnswers->mapWithKeys(function ($answer) {
-                return [$answer->question->title => $answer->answer];
-            });
-        });
 
         return response()->json([
             'id' => $id,
             'submitted_at' => $firstAnswer->created_at->format('Y-m-d H:i:s'),
-            'statistics' => $questionStats,
-            'answers' => $groupedAnswers,
+            'categories' => $categories,
         ]);
     }
 }
