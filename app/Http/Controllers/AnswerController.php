@@ -108,9 +108,10 @@ class AnswerController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $groupedAnswers = $answers->groupBy('submission_id')->map(function ($group) {
+        $submissions = $answers->groupBy('submission_id')->map(function ($group, $submissionId) {
             $firstAnswer = $group->first();
             return [
+                'id' => $submissionId,
                 'submitted_at' => $firstAnswer->created_at->format('Y-m-d H:i:s'),
                 'answers' => $group->groupBy(function ($answer) {
                     return $answer->question->questionGroup->title;
@@ -122,30 +123,87 @@ class AnswerController extends Controller
             ];
         })->values();
 
-        return response()->json([
-            'id' => (string) Str::uuid(),
-            'answers' => $groupedAnswers,
-        ]);
+        return response()->json($submissions);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
-        $answer = Answer::with('question.questionGroup')->find($id);
-
-        if (! $answer) {
+        // Check if it's a UUID (submission_id) or numeric ID
+        $isUuid = Str::isUuid($id);
+        $isNumeric = is_numeric($id);
+        
+        // Try to find by submission_id if it's a UUID
+        if ($isUuid) {
+            $answers = Answer::with('question.questionGroup')
+                ->where('submission_id', $id)
+                ->orderBy('created_at', 'asc')
+                ->get();
+            
+            if ($answers->isEmpty()) {
+                return response()->json([
+                    'error' => 'Submission not found',
+                    'message' => "No submission found with submission_id: {$id}",
+                    'searched_id' => $id,
+                    'id_type' => 'submission_id (UUID)',
+                    'hint' => 'Make sure the submission_id exists. You can get all submissions from GET /api/answers',
+                ], 404);
+            }
+            
+            // Return all answers as an array
+            $firstAnswer = $answers->first();
+            $answersArray = $answers->map(function ($answer) {
+                return [
+                    'id' => $answer->id,
+                    'question_id' => $answer->question_id,
+                    'question_title' => $answer->question->title,
+                    'question_group' => $answer->question->questionGroup->title,
+                    'answer' => $answer->answer,
+                    'created_at' => $answer->created_at,
+                    'updated_at' => $answer->updated_at,
+                ];
+            })->values();
+            
             return response()->json([
-                'error' => 'Answer not found',
-            ], 404);
+                'id' => $id,
+                'submitted_at' => $firstAnswer->created_at->format('Y-m-d H:i:s'),
+                'answers' => $answersArray,
+            ]);
         }
-
+        
+        // Try to find by numeric ID (answer record ID)
+        if ($isNumeric) {
+            $answer = Answer::with('question.questionGroup')->find((int) $id);
+            
+            if (! $answer) {
+                return response()->json([
+                    'error' => 'Answer not found',
+                    'message' => "No answer record found with ID: {$id}",
+                    'searched_id' => $id,
+                    'id_type' => 'answer_id (integer)',
+                    'hint' => 'Make sure the answer ID exists. Answer IDs are auto-incrementing integers.',
+                ], 404);
+            }
+            
+            return response()->json([
+                'id' => $answer->id,
+                'question_id' => $answer->question_id,
+                'question_title' => $answer->question->title,
+                'question_group' => $answer->question->questionGroup->title,
+                'answer' => $answer->answer,
+                'created_at' => $answer->created_at,
+                'updated_at' => $answer->updated_at,
+            ]);
+        }
+        
+        // Invalid ID format
         return response()->json([
-            'id' => $answer->id,
-            'question_id' => $answer->question_id,
-            'question_title' => $answer->question->title,
-            'question_group' => $answer->question->questionGroup->title,
-            'answer' => $answer->answer,
-            'created_at' => $answer->created_at,
-            'updated_at' => $answer->updated_at,
-        ]);
+            'error' => 'Invalid ID format',
+            'message' => "The provided ID '{$id}' is not a valid UUID or numeric ID",
+            'searched_id' => $id,
+            'expected_formats' => [
+                'UUID format' => 'e.g., 93d896a5-dec0-41f1-b068-c6edbed3b186 (for submission_id)',
+                'Numeric ID' => 'e.g., 1, 2, 3 (for individual answer record ID)',
+            ],
+        ], 422);
     }
 }
