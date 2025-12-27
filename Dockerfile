@@ -56,6 +56,7 @@ RUN apk add --no-cache \
     supervisor \
     sqlite \
     sqlite-dev \
+    libzip-dev \
     curl \
     gettext
 
